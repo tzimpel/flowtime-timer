@@ -11,12 +11,14 @@
             padding: 2rem;
             background-color: #f4f4f4;
         }
+
         button {
             padding: 1rem 2rem;
             font-size: 1rem;
             margin: 1rem;
             cursor: pointer;
         }
+
         #timer {
             font-size: 2rem;
             margin: 1rem 0;
@@ -24,106 +26,167 @@
     </style>
 </head>
 <body>
-    <h1>Flowtime Timer</h1>
-    <div id="timer">00:00</div>
-    <button id="startStopBtn">Start Work</button>
-    <div id="status"></div>
+<h1>Flowtime Timer</h1>
+<div id="timer">00:00</div>
+<button id="startStopBtn">Start Work</button>
+<div id="status"></div>
 
-    <script>
-        let timerInterval;
-        let startTime;
-        let elapsedTime = 0;
-        let isRunning = false;
-        let isBreak = false;
-        let breakInterval;
+<script>
+    let timerInterval;
+    let breakInterval;
+    let isRunning = false;
+    let isBreak = false;
+    let startTime;
+    let breakStartTime;
+    let breakDuration;
+    let originalBreakTime;
 
-        const timerDisplay = document.getElementById('timer');
-        const startStopBtn = document.getElementById('startStopBtn');
-        const statusDisplay = document.getElementById('status');
+    const timerDisplay = document.getElementById('timer');
+    const startStopBtn = document.getElementById('startStopBtn');
+    const statusDisplay = document.getElementById('status');
 
-        function formatTime(ms) {
-            const totalSeconds = Math.floor(ms / 1000);
-            const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-            const seconds = String(totalSeconds % 60).padStart(2, '0');
-            return `${minutes}:${seconds}`;
+    // Load the saved state from localStorage
+    const savedState = JSON.parse(localStorage.getItem('timerState'));
+    if (savedState) {
+        isRunning = savedState.isRunning || false;
+        isBreak = savedState.isBreak || false;
+        startTime = savedState.startTime || Date.now();
+        breakStartTime = savedState.breakStartTime || 0;
+        breakDuration = savedState.breakDuration || 0;
+        originalBreakTime = savedState.originalBreakTime || 0;
+        updateUI();
+
+        // If the timer was running, we calculate elapsed time and update the display
+        if (isRunning) {
+            startTimer();
+        } else if (isBreak) {
+            startBreak(breakStartTime, originalBreakTime);
         }
+    }
 
-        function startTimer() {
-            startTime = Date.now() - elapsedTime;
-            timerInterval = setInterval(() => {
-                elapsedTime = Date.now() - startTime;
-                timerDisplay.textContent = formatTime(elapsedTime);
-            }, 1000);
-        }
+    function formatTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+        return `${minutes}:${seconds}`;
+    }
 
-        function stopTimer() {
-            clearInterval(timerInterval);
-            elapsedTime = Date.now() - startTime;
-        }
-
-        function calculateBreakTime(workTime) {
-            const workMinutes = workTime / 60000;
-            if (workMinutes <= 25) {
-                return 300000; // 5 minutes
-            } else if (workMinutes <= 50) {
-                return 480000; // 8 minutes
-            } else if (workMinutes <= 90) {
-                return 600000; // 10 minutes
-            } else {
-                return 900000; // 15 minutes
-            }
-        }
-
-        function startBreak(breakTime) {
-            isBreak = true;
-            statusDisplay.textContent = `Break time: ${breakTime / 60000} minutes`;
-            timerDisplay.textContent = formatTime(breakTime);
+    function updateUI() {
+        if (isBreak) {
+            // Update the display for the break
+            timerDisplay.textContent = formatTime(breakDuration);
             startStopBtn.textContent = 'Stop Break';
-
-            breakInterval = setInterval(() => {
-                breakTime -= 1000;
-                timerDisplay.textContent = formatTime(breakTime);
-                if (breakTime <= 0) {
-                    clearInterval(breakInterval);
-                    statusDisplay.textContent = 'Break over! Start a new session?';
-                    startStopBtn.textContent = 'Start Work';
-                    isRunning = false;
-                    isBreak = false;
-                }
-            }, 1000);
-        }
-
-        function stopBreak() {
-            clearInterval(breakInterval);
-            statusDisplay.textContent = 'Break stopped. Ready to start a new session?';
+            statusDisplay.textContent = `Break time: ${originalBreakTime / 60000} minutes`;
+        } else if (isRunning) {
+            // Update the display for the work session
+            timerDisplay.textContent = formatTime(Date.now() - startTime);
+            startStopBtn.textContent = 'Stop Work';
+            statusDisplay.textContent = 'Working...';
+        } else {
+            // Ready for the next session
+            timerDisplay.textContent = '00:00';
             startStopBtn.textContent = 'Start Work';
-            isRunning = false;
-            isBreak = false;
+            statusDisplay.textContent = 'Ready to start a new session?';
         }
+    }
 
-        startStopBtn.addEventListener('click', () => {
-            if (isBreak) {
-                if (!confirm('Are you sure you want to stop your break early? It is important to take sufficient breaks!')) {
-                    return; // Exit early if user cancels
-                }
-                stopBreak();
-            } else {
-                if (isRunning) {
-                    stopTimer();
-                    const workTime = elapsedTime;
-                    const breakTime = calculateBreakTime(workTime);
-                    statusDisplay.textContent = 'Taking a break...';
-                    startBreak(breakTime);
-                } else {
-                    elapsedTime = 0;
-                    timerDisplay.textContent = '00:00';
-                    startTimer();
-                    statusDisplay.textContent = 'Working...';
-                    startStopBtn.textContent = 'Stop Work';
-                }
-                isRunning = !isRunning;
+    function saveState() {
+        const state = {
+            isRunning: isRunning,
+            isBreak: isBreak,
+            startTime: startTime,
+            breakStartTime: breakStartTime,
+            breakDuration: breakDuration,
+            originalBreakTime: originalBreakTime,
+        };
+        localStorage.setItem('timerState', JSON.stringify(state));
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            timerDisplay.textContent = formatTime(elapsed);
+            saveState();
+        }, 1000);
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        saveState();
+    }
+
+    function calculateBreakTime(workTime) {
+        const workMinutes = workTime / 60000;
+        if (workMinutes <= 25) {
+            return 300000; // 5 minutes
+        } else if (workMinutes <= 50) {
+            return 480000; // 8 minutes
+        } else if (workMinutes <= 90) {
+            return 600000; // 10 minutes
+        } else {
+            return 900000; // 15 minutes
+        }
+    }
+
+    function startBreak(start, originalTime) {
+        isBreak = true;
+        breakStartTime = start || Date.now();
+        originalBreakTime = originalTime || calculateBreakTime(Date.now() - startTime);
+
+        breakInterval = setInterval(() => {
+            const timeElapsed = Date.now() - breakStartTime;
+            let remaining = originalBreakTime - timeElapsed;
+
+            if (remaining <= 0) {
+                clearInterval(breakInterval);
+                remaining = 0;
+                timerDisplay.textContent = formatTime(0);
+                statusDisplay.textContent = 'Break over! Start a new session?';
+                startStopBtn.textContent = 'Start Work';
+                isRunning = false;
+                isBreak = false;
+                saveState();
+                return;
             }
-        });
-    </script>
+
+            timerDisplay.textContent = formatTime(remaining);
+            statusDisplay.textContent = `Break time: ${originalBreakTime / 60000} minutes`;
+            saveState();
+        }, 1000);
+    }
+
+    function stopBreak() {
+        clearInterval(breakInterval);
+        statusDisplay.textContent = 'Break stopped. Ready to start a new session?';
+        startStopBtn.textContent = 'Start Work';
+        isRunning = false;
+        isBreak = false;
+        saveState();
+    }
+
+    startStopBtn.addEventListener('click', () => {
+        if (isBreak) {
+            if (!confirm('Are you sure you want to stop your break early? It is important to take sufficient breaks!')) {
+                return; // Exit early if user cancels
+            }
+            stopBreak();
+        } else {
+            if (isRunning) {
+                stopTimer();
+                const workTime = Date.now() - startTime;
+                const breakTime = calculateBreakTime(workTime);
+                originalBreakTime = breakTime; // Save the calculated break time
+                startBreak(Date.now(), originalBreakTime);
+            } else {
+                startTime = Date.now();
+                startTimer();
+                statusDisplay.textContent = 'Working...';
+                startStopBtn.textContent = 'Stop Work';
+            }
+            isRunning = !isRunning;
+            saveState();
+        }
+    });
+</script>
 </body>
 </html>
